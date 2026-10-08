@@ -1,0 +1,6 @@
+# Project documentation is maintained locally.
+*.md
+
+# Documentation images and generated context examples.
+/images/
+/yaml/
