@@ -17,3 +17,9 @@ dist/
 
 # Project virtual environment
 .venv/
+
+# Local embedding model files
+/docker/embedding/
+
+# Local environment variables
+/.env
