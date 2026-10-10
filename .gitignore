@@ -1,6 +1,17 @@
 # Project documentation is maintained locally.
 *.md
+/docs/command.txt
 
 # Documentation images and generated context examples.
 /images/
 /yaml/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Project virtual environment
+.venv/
