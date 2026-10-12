@@ -23,3 +23,6 @@ dist/
 
 # Local environment variables
 /.env
+
+# Local runtime logs
+/logs/
