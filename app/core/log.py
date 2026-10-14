@@ -20,11 +20,17 @@ PROJECT_ROOT = Path(__file__).parents[2]
 
 
 def inject_request_id(record):
-    """把当前上下文的 request_id 注入日志记录。"""
+    """把当前上下文的 request_id 注入日志记录。
+
+    Loguru 创建 record 后、交给输出处理器前调用此函数。
+    """
     record["extra"]["request_id"] = request_id_ctx_var.get()
 
 
+# 删除 Loguru 默认处理器，避免与项目控制台处理器重复输出。
 loguru_logger.remove()
+
+# 为每条日志记录注册 request_id 注入回调。
 logger = loguru_logger.patch(inject_request_id)
 
 if app_config.logging.console.enable:
