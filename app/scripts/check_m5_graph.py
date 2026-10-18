@@ -48,12 +48,26 @@ async def main() -> None:
             "retrieved_column_infos": [],
             "retrieved_metric_infos": [],
             "retrieved_value_infos": [],
+            "table_infos": [],
+            "metric_infos": [],
+            "date_info": {
+                "date": "",
+                "weekday": "",
+                "quarter": "",
+            },
+            "db_info": {
+                "dialect": "",
+                "version": "",
+            },
             "error": None,
         }
 
         result = await graph.ainvoke(
             input=state,
             context=context,
+            interrupt_before=[
+                "merge_retrieved_info",
+            ],
         )
 
         print(

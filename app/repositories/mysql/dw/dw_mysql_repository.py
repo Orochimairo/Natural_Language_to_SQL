@@ -27,11 +27,23 @@ class DWMySQLRepository:
     ) -> list:
         """读取指定字段的去重值。"""
 
-        sql = (
-            f"SELECT DISTINCT {column_name} "
-            f"FROM {table_name} "
-            f"LIMIT {limit}"
-        )
+        sql = f"SELECT DISTINCT {column_name} FROM {table_name} LIMIT {limit}"
         result = await self.session.execute(text(sql))
 
         return [row[0] for row in result.fetchall()]
+
+    async def get_db_info(self) -> dict[str, str]:
+        """读取 DW 数据库方言和版本。"""
+
+        result = await self.session.execute(text("SELECT VERSION()"))
+        version = result.scalar_one()
+
+        bind = self.session.bind
+
+        if bind is None:
+            raise RuntimeError("DW MySQL Session 没有绑定数据库连接")
+
+        return {
+            "dialect": bind.dialect.name,
+            "version": str(version),
+        }
