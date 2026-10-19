@@ -22,3 +22,10 @@ async def run_sql(
     result = await dw_mysql_repository.run(sql)
 
     logger.info(f"SQL执行结果: {result}")
+
+    writer(
+        {
+            "type": "result",
+            "data": result,
+        }
+    )
