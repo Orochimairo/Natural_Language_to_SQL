@@ -65,4 +65,5 @@ class DataAgentState(TypedDict):
     date_info: DateInfoState
     db_info: DBInfoState
 
+    sql: str
     error: str | None

@@ -47,3 +47,17 @@ class DWMySQLRepository:
             "dialect": bind.dialect.name,
             "version": str(version),
         }
+
+    async def validate(self, sql: str) -> None:
+        """使用 EXPLAIN 让数据库解析 SQL。"""
+
+        explain_sql = f"EXPLAIN {sql}"
+        await self.session.execute(text(explain_sql))
+
+    async def run(self, sql: str) -> list[dict]:
+        """执行查询并将结果转换成字典列表。"""
+
+        result = await self.session.execute(text(sql))
+        rows = result.mappings().fetchall()
+
+        return [dict(row) for row in rows]
