@@ -33,15 +33,18 @@ async def main() -> None:
                     "dw_mysql_repository": repository,
                 },
             )
-            runtime = Runtime[DataAgentContext](
+
+            validation_events: list[dict[str, str]] = []
+
+            validation_runtime = Runtime[DataAgentContext](
                 context=context,
-                stream_writer=print,
+                stream_writer=(validation_events.append),
             )
 
             invalid_state = cast(
                 DataAgentState,
                 {
-                    "query": "华东地区的销售总额是多少？",
+                    "query": ("华东地区的销售总额是多少？"),
                     "table_infos": [
                         {
                             "name": "fact_order",
@@ -50,46 +53,55 @@ async def main() -> None:
                             "columns": [
                                 {
                                     "name": "region_id",
-                                    "type": "varchar(64)",
-                                    "role": "foreign_key",
+                                    "type": ("varchar(64)"),
+                                    "role": ("foreign_key"),
                                     "examples": [],
-                                    "description": "地区外键",
+                                    "description": ("地区外键"),
                                     "alias": ["地区ID"],
                                 },
                                 {
-                                    "name": "order_amount",
-                                    "type": "decimal(18,2)",
+                                    "name": ("order_amount"),
+                                    "type": ("decimal(18,2)"),
                                     "role": "measure",
-                                    "examples": [1999.0, 6999.0],
-                                    "description": "订单成交金额",
-                                    "alias": ["订单金额", "成交金额"],
+                                    "examples": [
+                                        1999.0,
+                                        6999.0,
+                                    ],
+                                    "description": ("订单成交金额"),
+                                    "alias": [
+                                        "订单金额",
+                                        "成交金额",
+                                    ],
                                 },
                             ],
                         },
                         {
                             "name": "dim_region",
                             "role": "dimension",
-                            "description": "地区维度表",
+                            "description": ("地区维度表"),
                             "columns": [
                                 {
                                     "name": "region_id",
-                                    "type": "varchar(64)",
-                                    "role": "primary_key",
+                                    "type": ("varchar(64)"),
+                                    "role": ("primary_key"),
                                     "examples": [],
-                                    "description": "地区唯一标识",
+                                    "description": ("地区唯一标识"),
                                     "alias": ["地区ID"],
                                 },
                                 {
-                                    "name": "region_name",
-                                    "type": "varchar(64)",
-                                    "role": "dimension",
+                                    "name": ("region_name"),
+                                    "type": ("varchar(64)"),
+                                    "role": ("dimension"),
                                     "examples": [
                                         "华北",
                                         "华南",
                                         "华东",
                                     ],
-                                    "description": "地区名称",
-                                    "alias": ["地区", "区域"],
+                                    "description": ("地区名称"),
+                                    "alias": [
+                                        "地区",
+                                        "区域",
+                                    ],
                                 },
                             ],
                         },
@@ -97,7 +109,7 @@ async def main() -> None:
                     "metric_infos": [
                         {
                             "name": "GMV",
-                            "description": "所有订单成交金额的总和",
+                            "description": ("所有订单成交金额的总和"),
                             "relevant_columns": [
                                 "fact_order.order_amount",
                             ],
@@ -129,8 +141,24 @@ async def main() -> None:
 
             validation_result = await validate_sql(
                 invalid_state,
-                runtime,
+                validation_runtime,
             )
+
+            expected_validation_events = [
+                {
+                    "type": "progress",
+                    "step": "校验SQL",
+                    "status": "running",
+                },
+                {
+                    "type": "progress",
+                    "step": "校验SQL",
+                    "status": "success",
+                },
+            ]
+
+            if validation_events != expected_validation_events:
+                raise AssertionError(f"SQL 校验事件不正确: {validation_events}")
 
             validation_error = validation_result["error"]
 
@@ -146,10 +174,36 @@ async def main() -> None:
             )
             original_correction_state = deepcopy(correction_state)
 
+            correction_events: list[dict[str, str]] = []
+
+            correction_runtime = Runtime[DataAgentContext](
+                context=context,
+                stream_writer=(correction_events.append),
+            )
+
             correction_result = await correct_sql(
                 correction_state,
-                runtime,
+                correction_runtime,
             )
+
+            expected_correction_events = [
+                {
+                    "type": "progress",
+                    "step": "校正SQL",
+                    "status": "running",
+                },
+                {
+                    "type": "progress",
+                    "step": "校正SQL",
+                    "status": "success",
+                },
+            ]
+
+            if correction_events != expected_correction_events:
+                raise AssertionError(f"SQL 校正事件不正确: {correction_events}")
+
+            if correction_result["error"] is not None:
+                raise AssertionError("SQL 校正成功后没有清空 error")
 
             corrected_sql = correction_result["sql"]
 
@@ -191,6 +245,14 @@ async def main() -> None:
 
             await repository.validate(corrected_sql)
 
+            print(
+                "SQL 校验事件:",
+                validation_events,
+            )
+            print(
+                "SQL 校正事件:",
+                correction_events,
+            )
             print("原 SQL:")
             print(invalid_state["sql"].strip())
             print("数据库错误:")
@@ -198,7 +260,9 @@ async def main() -> None:
             print("校正后的 SQL:")
             print(corrected_sql)
             print("校正后的 SQL 已通过真实 MySQL EXPLAIN")
+            print("校正结果已清空 error")
             print("输入 State 未被修改")
+            print("SQL 校正节点检查通过")
     finally:
         await dw_mysql_client_manager.close()
 

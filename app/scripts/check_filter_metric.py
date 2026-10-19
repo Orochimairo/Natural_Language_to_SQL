@@ -7,7 +7,9 @@ from typing import cast
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.nodes.filter_metric import filter_metric
+from app.agent.nodes.filter_metric import (
+    filter_metric,
+)
 from app.agent.state import (
     DataAgentState,
     MetricInfoState,
@@ -45,7 +47,7 @@ async def main() -> None:
     original_metric_infos = deepcopy(metric_infos)
 
     state: DataAgentState = {
-        "query": "华东地区 iPhone 的销售总额是多少？",
+        "query": ("华东地区 iPhone 的销售总额是多少？"),
         "keywords": [
             "华东地区",
             "iPhone",
@@ -63,15 +65,34 @@ async def main() -> None:
         DataAgentContext,
         {},
     )
+
+    events: list[dict[str, str]] = []
+
     runtime = Runtime[DataAgentContext](
         context=context,
-        stream_writer=print,
+        stream_writer=events.append,
     )
 
     result = await filter_metric(
         state,
         runtime,
     )
+
+    expected_events = [
+        {
+            "type": "progress",
+            "step": "过滤指标信息",
+            "status": "running",
+        },
+        {
+            "type": "progress",
+            "step": "过滤指标信息",
+            "status": "success",
+        },
+    ]
+
+    if events != expected_events:
+        raise AssertionError(f"指标过滤事件不正确: {events}")
 
     filtered_metric_infos = result["metric_infos"]
     filtered_metric_names = [
@@ -84,8 +105,42 @@ async def main() -> None:
     if metric_infos != original_metric_infos:
         raise AssertionError("filter_metric 修改了输入 metric_infos")
 
-    print("过滤后的指标:", filtered_metric_names)
+    print("指标过滤事件:", events)
+    print(
+        "过滤后的指标:",
+        filtered_metric_names,
+    )
     print("输入 metric_infos 未被修改")
+
+    empty_events: list[dict[str, str]] = []
+
+    empty_runtime = Runtime[DataAgentContext](
+        context=context,
+        stream_writer=empty_events.append,
+    )
+
+    empty_state = cast(
+        DataAgentState,
+        {
+            "query": "查询订单数量",
+            "metric_infos": [],
+        },
+    )
+
+    empty_result = await filter_metric(
+        empty_state,
+        empty_runtime,
+    )
+
+    if empty_result != {"metric_infos": []}:
+        raise AssertionError(f"空候选指标返回结果不正确: {empty_result}")
+
+    if empty_events != expected_events:
+        raise AssertionError(f"空候选指标事件不正确: {empty_events}")
+
+    print("空候选指标正常返回:", empty_result)
+    print("空候选指标事件:", empty_events)
+    print("指标过滤节点检查通过")
 
 
 if __name__ == "__main__":

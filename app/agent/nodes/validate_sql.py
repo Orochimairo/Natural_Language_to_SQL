@@ -14,20 +14,62 @@ async def validate_sql(
 ) -> dict[str, str | None]:
     """使用真实数据库校验 SQL，并返回校验错误。"""
 
+    step = "校验SQL"
     writer = runtime.stream_writer
-    writer("校验SQL")
 
-    sql = state["sql"]
-    dw_mysql_repository = runtime.context["dw_mysql_repository"]
+    writer(
+        {
+            "type": "progress",
+            "step": step,
+            "status": "running",
+        }
+    )
 
     try:
-        await dw_mysql_repository.validate(sql)
-    except SQLAlchemyError as error:
-        error_message = str(error)
-        logger.info(f"SQL语法错误: {error_message}")
+        sql = state["sql"]
+        dw_mysql_repository = runtime.context["dw_mysql_repository"]
 
-        return {"error": error_message}
+        try:
+            await dw_mysql_repository.validate(sql)
+        except SQLAlchemyError as error:
+            error_message = str(error)
 
-    logger.info("SQL语法正确")
+            logger.info(f"SQL语法错误: {error_message}")
 
-    return {"error": None}
+            writer(
+                {
+                    "type": "progress",
+                    "step": step,
+                    "status": "success",
+                }
+            )
+
+            return {
+                "error": error_message,
+            }
+
+        logger.info("SQL语法正确")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "success",
+            }
+        )
+
+        return {
+            "error": None,
+        }
+    except Exception as error:
+        logger.error(f"{step}失败: {error}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "error",
+            }
+        )
+
+        raise

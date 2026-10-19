@@ -56,7 +56,11 @@ async def main() -> None:
                     type_="varchar(64)",
                     role="dimension",
                     description="地区名称",
-                    examples=["华北", "华南", "华东"],
+                    examples=[
+                        "华北",
+                        "华南",
+                        "华东",
+                    ],
                     alias=["地区", "区域"],
                 ),
             ],
@@ -131,8 +135,14 @@ async def main() -> None:
                     type_="decimal(18,2)",
                     role="measure",
                     description="订单成交金额",
-                    examples=[1999.00, 6999.00],
-                    alias=["订单金额", "成交金额"],
+                    examples=[
+                        1999.00,
+                        6999.00,
+                    ],
+                    alias=[
+                        "订单金额",
+                        "成交金额",
+                    ],
                 ),
             ],
         ),
@@ -141,7 +151,7 @@ async def main() -> None:
     original_table_infos = deepcopy(table_infos)
 
     state: DataAgentState = {
-        "query": "华东地区 iPhone 的销售总额是多少？",
+        "query": ("华东地区 iPhone 的销售总额是多少？"),
         "keywords": [
             "华东地区",
             "iPhone",
@@ -159,9 +169,12 @@ async def main() -> None:
         DataAgentContext,
         {},
     )
+
+    events: list[dict[str, str]] = []
+
     runtime = Runtime[DataAgentContext](
         context=context,
-        stream_writer=print,
+        stream_writer=events.append,
     )
 
     result = await filter_table(
@@ -169,7 +182,24 @@ async def main() -> None:
         runtime,
     )
 
+    expected_events = [
+        {
+            "type": "progress",
+            "step": "过滤表信息",
+            "status": "running",
+        },
+        {
+            "type": "progress",
+            "step": "过滤表信息",
+            "status": "success",
+        },
+    ]
+
+    if events != expected_events:
+        raise AssertionError(f"表过滤事件不正确: {events}")
+
     filtered_table_infos = result["table_infos"]
+
     filtered_table_map = {
         table_info["name"]: table_info for table_info in filtered_table_infos
     }
@@ -204,7 +234,10 @@ async def main() -> None:
         },
     }
 
-    for table_name, column_names in required_columns.items():
+    for (
+        table_name,
+        column_names,
+    ) in required_columns.items():
         missing_columns = column_names - filtered_column_names[table_name]
 
         if missing_columns:
@@ -227,9 +260,17 @@ async def main() -> None:
     if table_infos != original_table_infos:
         raise AssertionError("filter_table 修改了输入 table_infos")
 
-    print("过滤后的表:", list(filtered_table_map))
-    print("过滤后的字段:", filtered_column_names)
+    print("表过滤事件:", events)
+    print(
+        "过滤后的表:",
+        list(filtered_table_map),
+    )
+    print(
+        "过滤后的字段:",
+        filtered_column_names,
+    )
     print("输入 table_infos 未被修改")
+    print("表信息过滤节点检查通过")
 
 
 if __name__ == "__main__":

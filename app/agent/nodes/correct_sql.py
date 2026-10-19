@@ -15,71 +15,103 @@ from app.prompt.prompt_loader import load_prompt
 async def correct_sql(
     state: DataAgentState,
     runtime: Runtime[DataAgentContext],
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """根据数据库校验错误修正 SQL。"""
 
+    step = "校正SQL"
     writer = runtime.stream_writer
-    writer("校正SQL")
 
-    table_infos = state["table_infos"]
-    metric_infos = state["metric_infos"]
-    date_info = state["date_info"]
-    db_info = state["db_info"]
-    query = state["query"]
-    sql = state["sql"]
-    error = state["error"]
-
-    if error is None:
-        raise ValueError("没有 SQL 校验错误，不能执行 SQL 校正")
-
-    prompt = PromptTemplate(
-        template=load_prompt("correct_sql"),
-        input_variables=[
-            "table_infos",
-            "metric_infos",
-            "date_info",
-            "db_info",
-            "query",
-            "sql",
-            "error",
-        ],
-    )
-    output_parser = StrOutputParser()
-    chain = prompt | llm | output_parser
-
-    result = await chain.ainvoke(
+    writer(
         {
-            "table_infos": yaml.dump(
-                table_infos,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "metric_infos": yaml.dump(
-                metric_infos,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "date_info": yaml.dump(
-                date_info,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "db_info": yaml.dump(
-                db_info,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "query": query,
-            "sql": sql,
-            "error": error,
+            "type": "progress",
+            "step": step,
+            "status": "running",
         }
     )
 
-    corrected_sql = result.strip()
+    try:
+        table_infos = state["table_infos"]
+        metric_infos = state["metric_infos"]
+        date_info = state["date_info"]
+        db_info = state["db_info"]
+        query = state["query"]
+        sql = state["sql"]
+        error = state["error"]
 
-    if not corrected_sql:
-        raise ValueError("模型校正后的 SQL 不能为空")
+        if error is None:
+            raise ValueError("没有 SQL 校验错误，不能执行 SQL 校正")
 
-    logger.info(f"校正后的SQL: {corrected_sql}")
+        prompt = PromptTemplate(
+            template=load_prompt("correct_sql"),
+            input_variables=[
+                "table_infos",
+                "metric_infos",
+                "date_info",
+                "db_info",
+                "query",
+                "sql",
+                "error",
+            ],
+        )
+        output_parser = StrOutputParser()
+        chain = prompt | llm | output_parser
 
-    return {"sql": corrected_sql}
+        result = await chain.ainvoke(
+            {
+                "table_infos": yaml.dump(
+                    table_infos,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "metric_infos": yaml.dump(
+                    metric_infos,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "date_info": yaml.dump(
+                    date_info,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "db_info": yaml.dump(
+                    db_info,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "query": query,
+                "sql": sql,
+                "error": error,
+            }
+        )
+
+        corrected_sql = result.strip()
+
+        if not corrected_sql:
+            raise ValueError("模型校正后的 SQL 不能为空")
+
+        logger.info(f"校正后的SQL: {corrected_sql}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "success",
+            }
+        )
+
+        return {
+            "sql": corrected_sql,
+            "error": None,
+        }
+    except Exception as error:
+        logger.error(f"{step}失败: {error}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "error",
+            }
+        )
+
+        raise

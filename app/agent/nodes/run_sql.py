@@ -11,21 +11,50 @@ async def run_sql(
     state: DataAgentState,
     runtime: Runtime[DataAgentContext],
 ) -> None:
-    """执行最终 SQL 并记录查询结果。"""
+    """执行最终 SQL 并将查询结果写入自定义流。"""
 
+    step = "执行SQL"
     writer = runtime.stream_writer
-    writer("执行SQL")
-
-    sql = state["sql"]
-    dw_mysql_repository = runtime.context["dw_mysql_repository"]
-
-    result = await dw_mysql_repository.run(sql)
-
-    logger.info(f"SQL执行结果: {result}")
 
     writer(
         {
-            "type": "result",
-            "data": result,
+            "type": "progress",
+            "step": step,
+            "status": "running",
         }
     )
+
+    try:
+        sql = state["sql"]
+        dw_mysql_repository = runtime.context["dw_mysql_repository"]
+
+        result = await dw_mysql_repository.run(sql)
+
+        logger.info(f"SQL执行结果: {result}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "success",
+            }
+        )
+
+        writer(
+            {
+                "type": "result",
+                "data": result,
+            }
+        )
+    except Exception as error:
+        logger.error(f"{step}失败: {error}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "error",
+            }
+        )
+
+        raise

@@ -59,15 +59,34 @@ async def main() -> None:
                     "dw_mysql_repository": (DWMySQLRepository(session)),
                 },
             )
+
+            events: list[dict[str, str]] = []
+
             runtime = Runtime[DataAgentContext](
                 context=context,
-                stream_writer=print,
+                stream_writer=events.append,
             )
 
             result = await add_extra_context(
                 state,
                 runtime,
             )
+
+            expected_events = [
+                {
+                    "type": "progress",
+                    "step": "添加额外上下文",
+                    "status": "running",
+                },
+                {
+                    "type": "progress",
+                    "step": "添加额外上下文",
+                    "status": "success",
+                },
+            ]
+
+            if events != expected_events:
+                raise AssertionError(f"额外上下文事件不正确: {events}")
 
             today = date.today()
             expected_date = today.strftime("%Y-%m-%d")
@@ -95,9 +114,11 @@ async def main() -> None:
             if state != original_state:
                 raise AssertionError("add_extra_context 修改了输入 State")
 
+            print("额外上下文事件:", events)
             print("日期信息:", date_info)
             print("数据库信息:", db_info)
             print("输入 State 未被修改")
+            print("额外上下文节点检查通过")
     finally:
         await dw_mysql_client_manager.close()
 

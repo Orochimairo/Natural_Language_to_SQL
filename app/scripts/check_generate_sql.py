@@ -17,7 +17,7 @@ async def main() -> None:
     state = cast(
         DataAgentState,
         {
-            "query": "华东地区 iPhone 的销售总额是多少？",
+            "query": ("华东地区 iPhone 的销售总额是多少？"),
             "table_infos": [
                 {
                     "name": "fact_order",
@@ -44,9 +44,15 @@ async def main() -> None:
                             "name": "order_amount",
                             "type": "decimal(18,2)",
                             "role": "measure",
-                            "examples": [1999.0, 6999.0],
-                            "description": "订单成交金额",
-                            "alias": ["订单金额", "成交金额"],
+                            "examples": [
+                                1999.0,
+                                6999.0,
+                            ],
+                            "description": ("订单成交金额"),
+                            "alias": [
+                                "订单金额",
+                                "成交金额",
+                            ],
                         },
                     ],
                 },
@@ -60,16 +66,23 @@ async def main() -> None:
                             "type": "varchar(64)",
                             "role": "primary_key",
                             "examples": [],
-                            "description": "地区唯一标识",
+                            "description": ("地区唯一标识"),
                             "alias": ["地区ID"],
                         },
                         {
                             "name": "region_name",
                             "type": "varchar(64)",
                             "role": "dimension",
-                            "examples": ["华北", "华南", "华东"],
+                            "examples": [
+                                "华北",
+                                "华南",
+                                "华东",
+                            ],
                             "description": "地区名称",
-                            "alias": ["地区", "区域"],
+                            "alias": [
+                                "地区",
+                                "区域",
+                            ],
                         },
                     ],
                 },
@@ -83,7 +96,7 @@ async def main() -> None:
                             "type": "varchar(64)",
                             "role": "primary_key",
                             "examples": [],
-                            "description": "商品唯一标识",
+                            "description": ("商品唯一标识"),
                             "alias": ["商品ID"],
                         },
                         {
@@ -95,7 +108,10 @@ async def main() -> None:
                                 "Mate 60 Pro",
                             ],
                             "description": "商品名称",
-                            "alias": ["商品", "产品名称"],
+                            "alias": [
+                                "商品",
+                                "产品名称",
+                            ],
                         },
                     ],
                 },
@@ -103,7 +119,7 @@ async def main() -> None:
             "metric_infos": [
                 {
                     "name": "GMV",
-                    "description": "所有订单成交金额的总和",
+                    "description": ("所有订单成交金额的总和"),
                     "relevant_columns": [
                         "fact_order.order_amount",
                     ],
@@ -127,16 +143,33 @@ async def main() -> None:
     )
 
     original_state = deepcopy(state)
+    events: list[dict[str, str]] = []
 
     runtime = Runtime[DataAgentContext](
         context=cast(DataAgentContext, {}),
-        stream_writer=print,
+        stream_writer=events.append,
     )
 
     result = await generate_sql(
         state,
         runtime,
     )
+
+    expected_events = [
+        {
+            "type": "progress",
+            "step": "生成SQL",
+            "status": "running",
+        },
+        {
+            "type": "progress",
+            "step": "生成SQL",
+            "status": "success",
+        },
+    ]
+
+    if events != expected_events:
+        raise AssertionError(f"SQL 生成事件不正确: {events}")
 
     sql = result["sql"]
 
@@ -178,9 +211,11 @@ async def main() -> None:
     if state != original_state:
         raise AssertionError("generate_sql 修改了输入 State")
 
+    print("SQL 生成事件:", events)
     print("生成的 SQL:")
     print(sql)
     print("输入 State 未被修改")
+    print("SQL 生成节点检查通过")
 
 
 if __name__ == "__main__":

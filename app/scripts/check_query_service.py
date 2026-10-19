@@ -6,7 +6,9 @@ import json
 from app.clients.embedding_client_manager import (
     embedding_client_manager,
 )
-from app.clients.es_client_manager import es_client_manager
+from app.clients.es_client_manager import (
+    es_client_manager,
+)
 from app.clients.mysql_client_manager import (
     dw_mysql_client_manager,
     meta_mysql_client_manager,
@@ -47,16 +49,16 @@ async def main() -> None:
             dw_mysql_client_manager.session_factory() as dw_session,
         ):
             query_service = QueryService(
-                meta_mysql_repository=MetaMySQLRepository(meta_session),
-                embedding_client=embedding_client_manager.client,
-                dw_mysql_repository=DWMySQLRepository(dw_session),
-                column_qdrant_repository=ColumnQdrantRepository(
-                    qdrant_client_manager.client
+                meta_mysql_repository=(MetaMySQLRepository(meta_session)),
+                embedding_client=(embedding_client_manager.client),
+                dw_mysql_repository=(DWMySQLRepository(dw_session)),
+                column_qdrant_repository=(
+                    ColumnQdrantRepository(qdrant_client_manager.client)
                 ),
-                metric_qdrant_repository=MetricQdrantRepository(
-                    qdrant_client_manager.client
+                metric_qdrant_repository=(
+                    MetricQdrantRepository(qdrant_client_manager.client)
                 ),
-                value_es_repository=ValueESRepository(es_client_manager.client),
+                value_es_repository=(ValueESRepository(es_client_manager.client)),
             )
 
             messages = [
@@ -79,7 +81,6 @@ async def main() -> None:
                     raise AssertionError(f"SSE 消息缺少结尾空行: {message!r}")
 
                 payload = message.removeprefix("data: ").removesuffix("\n\n")
-
                 event = json.loads(payload)
 
                 if not isinstance(event, dict):
@@ -95,7 +96,6 @@ async def main() -> None:
             progress_events = [
                 event for event in events if event.get("type") == "progress"
             ]
-
             result_events = [event for event in events if event.get("type") == "result"]
 
             if not progress_events:
@@ -104,7 +104,29 @@ async def main() -> None:
             if len(result_events) != 1:
                 raise AssertionError(f"预期一个结果事件，实际为: {result_events}")
 
-            progress_steps = {event.get("step") for event in progress_events}
+            progress_statuses: dict[
+                str,
+                list[str],
+            ] = {}
+
+            for event in progress_events:
+                step = event.get("step")
+                status = event.get("status")
+
+                if not isinstance(step, str):
+                    raise AssertionError(f"进度事件缺少字符串 step: {event}")
+
+                if status not in {
+                    "running",
+                    "success",
+                    "error",
+                }:
+                    raise AssertionError(f"进度事件 status 不合法: {event}")
+
+                progress_statuses.setdefault(
+                    step,
+                    [],
+                ).append(status)
 
             required_steps = {
                 "抽取关键词",
@@ -120,10 +142,17 @@ async def main() -> None:
                 "执行SQL",
             }
 
-            missing_steps = required_steps - progress_steps
+            missing_steps = required_steps - set(progress_statuses)
 
             if missing_steps:
                 raise AssertionError(f"缺少进度步骤: {missing_steps}")
+
+            for step, statuses in progress_statuses.items():
+                if statuses != [
+                    "running",
+                    "success",
+                ]:
+                    raise AssertionError(f"{step} 的状态顺序不正确: {statuses}")
 
             query_result = result_events[0].get("data")
 
@@ -133,13 +162,22 @@ async def main() -> None:
             if not query_result:
                 raise AssertionError("最终查询结果为空")
 
-            if not isinstance(query_result[0], dict):
+            if not isinstance(
+                query_result[0],
+                dict,
+            ):
                 raise AssertionError(f"查询结果行不是字典: {query_result[0]}")
 
-            print("进度步骤:", progress_steps)
-            print("最终结果事件:", result_events[0])
-            print("SSE 消息数量:", len(messages))
-            print("QueryService 真实工作流检查通过")
+            print("节点状态:", progress_statuses)
+            print(
+                "最终结果事件:",
+                result_events[0],
+            )
+            print(
+                "SSE 消息数量:",
+                len(messages),
+            )
+            print("QueryService 结构化事件检查通过")
     finally:
         await dw_mysql_client_manager.close()
         await meta_mysql_client_manager.close()

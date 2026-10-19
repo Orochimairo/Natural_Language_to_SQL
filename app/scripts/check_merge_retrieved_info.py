@@ -7,9 +7,13 @@ from typing import cast
 from langgraph.runtime import Runtime
 
 from app.agent.context import DataAgentContext
-from app.agent.nodes.merge_retrieved_info import merge_retrieved_info
+from app.agent.nodes.merge_retrieved_info import (
+    merge_retrieved_info,
+)
 from app.agent.state import DataAgentState
-from app.clients.mysql_client_manager import meta_mysql_client_manager
+from app.clients.mysql_client_manager import (
+    meta_mysql_client_manager,
+)
 from app.entities.metric_info import MetricInfo
 from app.entities.value_info import ValueInfo
 from app.repositories.mysql.meta.meta_mysql_repository import (
@@ -58,7 +62,7 @@ async def main() -> None:
             original_product_examples = list(product_column.examples)
 
             state: DataAgentState = {
-                "query": "华东地区 iPhone 的销售总额是多少？",
+                "query": ("华东地区 iPhone 的销售总额是多少？"),
                 "keywords": [
                     "华东地区",
                     "iPhone",
@@ -72,7 +76,7 @@ async def main() -> None:
                     MetricInfo(
                         id="GMV",
                         name="GMV",
-                        description="所有订单成交金额的总和",
+                        description=("所有订单成交金额的总和"),
                         relevant_columns=[
                             "fact_order.order_amount",
                         ],
@@ -84,14 +88,14 @@ async def main() -> None:
                 ],
                 "retrieved_value_infos": [
                     ValueInfo(
-                        id="dim_region.region_name.华东",
+                        id=("dim_region.region_name.华东"),
                         value="华东",
-                        column_id="dim_region.region_name",
+                        column_id=("dim_region.region_name"),
                     ),
                     ValueInfo(
                         id=("dim_product.product_name.iPhone 15 Pro"),
                         value="iPhone 15 Pro",
-                        column_id="dim_product.product_name",
+                        column_id=("dim_product.product_name"),
                     ),
                 ],
                 "table_infos": [],
@@ -106,15 +110,33 @@ async def main() -> None:
                 },
             )
 
+            events: list[dict[str, str]] = []
+
             runtime = Runtime[DataAgentContext](
                 context=context,
-                stream_writer=print,
+                stream_writer=events.append,
             )
 
             result = await merge_retrieved_info(
                 state,
                 runtime,
             )
+
+            expected_events = [
+                {
+                    "type": "progress",
+                    "step": "合并召回信息",
+                    "status": "running",
+                },
+                {
+                    "type": "progress",
+                    "step": "合并召回信息",
+                    "status": "success",
+                },
+            ]
+
+            if events != expected_events:
+                raise AssertionError(f"合并召回事件不正确: {events}")
 
             table_infos = result["table_infos"]
             metric_infos = result["metric_infos"]
@@ -130,9 +152,8 @@ async def main() -> None:
             }
 
             if not expected_tables.issubset(table_info_map):
-                raise AssertionError(
-                    f"合并结果缺少预期表: {expected_tables - set(table_info_map)}"
-                )
+                missing_tables = expected_tables - set(table_info_map)
+                raise AssertionError(f"合并结果缺少预期表: {missing_tables}")
 
             column_name_map = {
                 table_name: {
@@ -157,7 +178,10 @@ async def main() -> None:
                 },
             }
 
-            for table_name, column_names in expected_columns.items():
+            for (
+                table_name,
+                column_names,
+            ) in expected_columns.items():
                 missing_columns = column_names - column_name_map[table_name]
 
                 if missing_columns:
@@ -191,6 +215,7 @@ async def main() -> None:
             if metric_names != ["GMV"]:
                 raise AssertionError(f"指标合并结果不正确: {metric_names}")
 
+            print("合并召回事件:", events)
             print("表:", list(table_info_map))
             print("字段:", column_name_map)
             print("指标:", metric_names)
@@ -203,6 +228,7 @@ async def main() -> None:
                 product_name_info["examples"],
             )
             print("原始召回对象未被修改")
+            print("召回结果合并节点检查通过")
     finally:
         await meta_mysql_client_manager.close()
 

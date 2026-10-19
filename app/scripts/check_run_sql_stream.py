@@ -18,7 +18,7 @@ from app.repositories.mysql.dw.dw_mysql_repository import (
 
 
 async def main() -> None:
-    """检查真实查询结果能够进入 LangGraph 自定义流。"""
+    """检查真实查询结果能够进入自定义流。"""
 
     dw_mysql_client_manager.init()
 
@@ -60,13 +60,26 @@ async def main() -> None:
             if node_result is not None:
                 raise AssertionError(f"run_sql 不应返回 State 更新: {node_result}")
 
-            if len(events) != 2:
+            if len(events) != 3:
                 raise AssertionError(f"run_sql 流事件数量不正确: {events}")
 
-            if events[0] != "执行SQL":
-                raise AssertionError(f"第一条流事件不是执行进度: {events[0]}")
+            expected_progress_events = [
+                {
+                    "type": "progress",
+                    "step": "执行SQL",
+                    "status": "running",
+                },
+                {
+                    "type": "progress",
+                    "step": "执行SQL",
+                    "status": "success",
+                },
+            ]
 
-            result_event = events[1]
+            if events[:2] != expected_progress_events:
+                raise AssertionError(f"SQL 执行进度事件不正确: {events[:2]}")
+
+            result_event = events[2]
 
             if not isinstance(result_event, dict):
                 raise AssertionError(f"结果事件不是字典: {result_event}")

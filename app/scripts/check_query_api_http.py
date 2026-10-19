@@ -12,7 +12,7 @@ def main() -> None:
     """模拟前端发送 POST 并逐条读取真实 SSE。"""
 
     payload = {
-        "query": "华东地区 iPhone 的销售总额是多少？",
+        "query": ("华东地区 iPhone 的销售总额是多少？"),
     }
 
     started_at = monotonic()
@@ -24,7 +24,10 @@ def main() -> None:
         json=payload,
         timeout=120.0,
     ) as response:
-        print("HTTP 状态码:", response.status_code)
+        print(
+            "HTTP 状态码:",
+            response.status_code,
+        )
         print(
             "响应类型:",
             response.headers.get("content-type"),
@@ -70,7 +73,6 @@ def main() -> None:
         raise AssertionError(f"查询接口返回错误事件: {error_events}")
 
     progress_events = [event for event in events if event.get("type") == "progress"]
-
     result_events = [event for event in events if event.get("type") == "result"]
 
     if not progress_events:
@@ -79,13 +81,55 @@ def main() -> None:
     if len(result_events) != 1:
         raise AssertionError(f"预期一个结果事件，实际为: {result_events}")
 
-    progress_steps = {event.get("step") for event in progress_events}
+    progress_statuses: dict[
+        str,
+        list[str],
+    ] = {}
 
-    if "抽取关键词" not in progress_steps:
-        raise AssertionError(f"缺少抽取关键词事件: {progress_steps}")
+    for event in progress_events:
+        step = event.get("step")
+        status = event.get("status")
 
-    if "执行SQL" not in progress_steps:
-        raise AssertionError(f"缺少执行SQL事件: {progress_steps}")
+        if not isinstance(step, str):
+            raise AssertionError(f"进度事件缺少字符串 step: {event}")
+
+        if status not in {
+            "running",
+            "success",
+            "error",
+        }:
+            raise AssertionError(f"进度事件 status 不合法: {event}")
+
+        progress_statuses.setdefault(
+            step,
+            [],
+        ).append(status)
+
+    required_steps = {
+        "抽取关键词",
+        "召回字段信息",
+        "召回指标信息",
+        "召回字段取值",
+        "合并召回信息",
+        "过滤表信息",
+        "过滤指标信息",
+        "添加额外上下文",
+        "生成SQL",
+        "校验SQL",
+        "执行SQL",
+    }
+
+    missing_steps = required_steps - set(progress_statuses)
+
+    if missing_steps:
+        raise AssertionError(f"缺少进度步骤: {missing_steps}")
+
+    for step, statuses in progress_statuses.items():
+        if statuses != [
+            "running",
+            "success",
+        ]:
+            raise AssertionError(f"{step} 的状态顺序不正确: {statuses}")
 
     query_result = result_events[0].get("data")
 
@@ -98,9 +142,16 @@ def main() -> None:
     if not isinstance(query_result[0], dict):
         raise AssertionError(f"查询结果行不是字典: {query_result[0]}")
 
-    print("进度事件数量:", len(progress_events))
-    print("最终结果事件:", result_events[0])
-    print("真实 HTTP POST、LangGraph 和 SSE 检查通过")
+    print("节点状态:", progress_statuses)
+    print(
+        "进度事件数量:",
+        len(progress_events),
+    )
+    print(
+        "最终结果事件:",
+        result_events[0],
+    )
+    print("真实 HTTP POST、LangGraph 和结构化 SSE 检查通过")
 
 
 if __name__ == "__main__":

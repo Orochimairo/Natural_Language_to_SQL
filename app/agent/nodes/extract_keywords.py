@@ -14,36 +14,74 @@ async def extract_keywords(
 ) -> dict[str, list[str]]:
     """从用户问题中提取用于多路召回的关键词。"""
 
+    step = "抽取关键词"
     writer = runtime.stream_writer
-    writer("抽取关键词")
 
-    query = state["query"]
-
-    if not query.strip():
-        raise ValueError("query 不能为空")
-
-    allow_pos = (
-        "n",
-        "nr",
-        "ns",
-        "nt",
-        "nz",
-        "v",
-        "vn",
-        "a",
-        "an",
-        "eng",
-        "i",
-        "l",
+    writer(
+        {
+            "type": "progress",
+            "step": step,
+            "status": "running",
+        }
     )
 
-    keywords = jieba.analyse.extract_tags(
-        query,
-        allowPOS=allow_pos,
-    )
+    try:
+        query = state["query"]
 
-    keywords = list(dict.fromkeys([*keywords, query]))
+        if not query.strip():
+            raise ValueError("query 不能为空")
 
-    logger.info(f"抽取关键词: {keywords}")
+        allow_pos = (
+            "n",
+            "nr",
+            "ns",
+            "nt",
+            "nz",
+            "v",
+            "vn",
+            "a",
+            "an",
+            "eng",
+            "i",
+            "l",
+        )
 
-    return {"keywords": keywords}
+        keywords = jieba.analyse.extract_tags(
+            query,
+            allowPOS=allow_pos,
+        )
+
+        keywords = list(
+            dict.fromkeys(
+                [
+                    *keywords,
+                    query,
+                ]
+            )
+        )
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "success",
+            }
+        )
+
+        logger.info(f"抽取关键词: {keywords}")
+
+        return {
+            "keywords": keywords,
+        }
+    except Exception as error:
+        logger.error(f"{step}失败: {error}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "error",
+            }
+        )
+
+        raise

@@ -19,29 +19,58 @@ async def add_extra_context(
 ) -> dict[str, DateInfoState | DBInfoState]:
     """补充当前日期和 DW 数据库环境信息。"""
 
+    step = "添加额外上下文"
     writer = runtime.stream_writer
-    writer("添加额外上下文")
 
-    today = date.today()
-
-    date_info = DateInfoState(
-        date=today.strftime("%Y-%m-%d"),
-        weekday=today.strftime("%A"),
-        quarter=f"Q{(today.month - 1) // 3 + 1}",
+    writer(
+        {
+            "type": "progress",
+            "step": step,
+            "status": "running",
+        }
     )
 
-    dw_mysql_repository = runtime.context["dw_mysql_repository"]
-    database_info = await dw_mysql_repository.get_db_info()
+    try:
+        today = date.today()
 
-    db_info = DBInfoState(
-        dialect=database_info["dialect"],
-        version=database_info["version"],
-    )
+        date_info = DateInfoState(
+            date=today.strftime("%Y-%m-%d"),
+            weekday=today.strftime("%A"),
+            quarter=(f"Q{(today.month - 1) // 3 + 1}"),
+        )
 
-    logger.info(f"日期信息: {date_info}")
-    logger.info(f"数据库信息: {db_info}")
+        dw_mysql_repository = runtime.context["dw_mysql_repository"]
+        database_info = await dw_mysql_repository.get_db_info()
 
-    return {
-        "date_info": date_info,
-        "db_info": db_info,
-    }
+        db_info = DBInfoState(
+            dialect=database_info["dialect"],
+            version=database_info["version"],
+        )
+
+        logger.info(f"日期信息: {date_info}")
+        logger.info(f"数据库信息: {db_info}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "success",
+            }
+        )
+
+        return {
+            "date_info": date_info,
+            "db_info": db_info,
+        }
+    except Exception as error:
+        logger.error(f"{step}失败: {error}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "error",
+            }
+        )
+
+        raise

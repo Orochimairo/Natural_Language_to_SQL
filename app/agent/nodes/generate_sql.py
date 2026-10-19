@@ -18,59 +18,90 @@ async def generate_sql(
 ) -> dict[str, str]:
     """根据用户问题和上下文生成候选 SQL。"""
 
+    step = "生成SQL"
     writer = runtime.stream_writer
-    writer("生成SQL")
 
-    table_infos = state["table_infos"]
-    metric_infos = state["metric_infos"]
-    date_info = state["date_info"]
-    db_info = state["db_info"]
-    query = state["query"]
-
-    prompt = PromptTemplate(
-        template=load_prompt("generate_sql"),
-        input_variables=[
-            "table_infos",
-            "metric_infos",
-            "date_info",
-            "db_info",
-            "query",
-        ],
-    )
-    output_parser = StrOutputParser()
-    chain = prompt | llm | output_parser
-
-    result = await chain.ainvoke(
+    writer(
         {
-            "table_infos": yaml.dump(
-                table_infos,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "metric_infos": yaml.dump(
-                metric_infos,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "date_info": yaml.dump(
-                date_info,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "db_info": yaml.dump(
-                db_info,
-                allow_unicode=True,
-                sort_keys=False,
-            ),
-            "query": query,
+            "type": "progress",
+            "step": step,
+            "status": "running",
         }
     )
 
-    sql = result.strip()
+    try:
+        table_infos = state["table_infos"]
+        metric_infos = state["metric_infos"]
+        date_info = state["date_info"]
+        db_info = state["db_info"]
+        query = state["query"]
 
-    if not sql:
-        raise ValueError("模型生成的 SQL 不能为空")
+        prompt = PromptTemplate(
+            template=load_prompt("generate_sql"),
+            input_variables=[
+                "table_infos",
+                "metric_infos",
+                "date_info",
+                "db_info",
+                "query",
+            ],
+        )
+        output_parser = StrOutputParser()
+        chain = prompt | llm | output_parser
 
-    logger.info(f"生成的SQL: {sql}")
+        result = await chain.ainvoke(
+            {
+                "table_infos": yaml.dump(
+                    table_infos,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "metric_infos": yaml.dump(
+                    metric_infos,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "date_info": yaml.dump(
+                    date_info,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "db_info": yaml.dump(
+                    db_info,
+                    allow_unicode=True,
+                    sort_keys=False,
+                ),
+                "query": query,
+            }
+        )
 
-    return {"sql": sql}
+        sql = result.strip()
+
+        if not sql:
+            raise ValueError("模型生成的 SQL 不能为空")
+
+        logger.info(f"生成的SQL: {sql}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "success",
+            }
+        )
+
+        return {
+            "sql": sql,
+        }
+    except Exception as error:
+        logger.error(f"{step}失败: {error}")
+
+        writer(
+            {
+                "type": "progress",
+                "step": step,
+                "status": "error",
+            }
+        )
+
+        raise
